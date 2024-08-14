@@ -40,13 +40,19 @@ TARGET_CATEGORY = 'bottle'  # 탐지할 객체 카테고리 설정 (병)
 # 거리 임계값 설정 (단위: cm)
 MIN_DISTANCE_THRESHOLD = 10  # 10cm 이하의 거리는 무시
 
+def send_to_arduino(message):
+    """
+    아두이노에 메시지를 전송하는 함수
+    """
+    arduino.write(bytes(f"{message}\n", 'utf-8'))
+    print(f"Message sent to Arduino: {message}")
+
 def send_distance_to_arduino(distance):
     """
     아두이노에 거리를 전송하는 함수
     """
     if distance > MIN_DISTANCE_THRESHOLD:  # 거리가 임계값보다 클 경우
-        arduino.write(bytes(f"{distance}\n", 'utf-8'))  # 아두이노로 거리 전송
-        print(f"Distance sent to Arduino: {distance} cm")  # 전송된 거리 출력
+        send_to_arduino(distance)  # 아두이노로 거리 전송
 
 def check_arduino_signal():
     """
@@ -82,10 +88,10 @@ def main():
                     if arduino_signal == 'moving':  # 이동 중 신호
                         is_moving = True  # 이동 상태로 설정
                         print("Moving signal received, pausing detection.")  # 이동 중임을 출력
-                    elif arduino_signal == 'find':  # 탐지 신호
+                    elif arduino_signal == 'find':  # 아두이노로부터 'find' 신호를 받으면
                         is_moving = False  # 탐지 상태로 설정
                         print("Find signal received, resuming detection.")  # 탐지 상태로 전환
-                    elif arduino_signal == 'check' and not is_moving:  # 탐지 신호가 'check'이고 이동 중이 아닐 때
+                    elif arduino_signal == 'check' and not is_moving:  # 아두이노가 'check' 신호를 보내고 이동 중이 아닐 때
                         # 병렬 처리로 프레임을 처리
                         future = executor.submit(process_frames, left_cam_url, right_cam_url, model, fl, tantheta, img_width)  # 프레임 처리 비동기 실행
                         result = future.result()  # 결과 가져오기
@@ -117,6 +123,12 @@ def main():
                         # 초당 30프레임 설정 (33ms 대기)
                         if cv2.waitKey(33) & 0xFF == ord('q'):  # 'q'를 누르면 루프 종료
                             break
+                    elif arduino_signal == 'ready':  # 아두이노가 최단 거리로 조정 후 'ready' 신호를 보내면
+                        print("Arduino is ready for movement.")  # 아두이노가 준비되었음을 출력
+                        is_moving = True  # 이동 상태로 설정
+                    elif arduino_signal == 'arrive':  # 아두이노가 도착하면 'arrive' 신호를 보냄
+                        print("Arrived at destination. Resuming object detection.")  # 목적지에 도착했음을 출력
+                        is_moving = False  # 이동 상태를 해제하고 탐지 재개
 
             except KeyError as e:  # KeyError 발생 시
                 print(f"KeyError: {e} - Skipping this frame.")  # 에러 메시지 출력하고 해당 프레임 건너뜀
